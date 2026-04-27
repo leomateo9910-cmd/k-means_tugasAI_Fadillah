@@ -13,10 +13,11 @@ def index():
         file = request.files.get("file")
         k = request.form.get("k")
 
-        # VALIDASI INPUT
+        # VALIDASI FILE
         if not file or file.filename == "":
             return "❌ File belum dipilih"
 
+        # VALIDASI K
         try:
             k = int(k)
         except:
@@ -24,51 +25,56 @@ def index():
 
         try:
             # BACA CSV
-            df = pd.read_csv(file, encoding='utf-8')
+            df = pd.read_csv(file, encoding="utf-8")
+
+            if df.empty:
+                return "❌ File kosong"
 
             # VALIDASI KOLOM
-            required_cols = ["Mobil", "Bus", "Truk", "Motor"]
+            required_cols = ["Wilayah", "Mobil", "Bus", "Truk", "Motor"]
             for col in required_cols:
                 if col not in df.columns:
-                    return f"❌ Kolom '{col}' tidak ditemukan di file CSV"
+                    return f"❌ Kolom '{col}' tidak ada di CSV"
 
             # AMBIL FITUR
-            X = df[required_cols]
+            X = df[["Mobil", "Bus", "Truk", "Motor"]]
 
             # NORMALISASI
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
 
-            # MODEL KMEANS
-            kmeans = KMeans(n_clusters=k, random_state=42)
+            # K-MEANS
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
             df["Cluster"] = kmeans.fit_predict(X_scaled)
 
             # TAMBAH TOTAL
-            df["Total"] = df[required_cols].sum(axis=1)
+            df["Total"] = df[["Mobil", "Bus", "Truk", "Motor"]].sum(axis=1)
 
             # INSIGHT
             total_motor = int(df["Motor"].sum())
             wilayah_tertinggi = df.loc[df["Motor"].idxmax()]["Wilayah"]
 
-            # VISUALISASI
+            # BUAT FOLDER STATIC (kalau belum ada)
             if not os.path.exists("static"):
                 os.makedirs("static")
 
-            plt.figure(figsize=(8,5))
-            plt.scatter(df["Motor"], df["Mobil"], c=df["Cluster"], cmap='viridis', s=100)
+            # VISUALISASI
+            plt.figure()
+            plt.scatter(df["Motor"], df["Mobil"], c=df["Cluster"])
             plt.xlabel("Motor")
             plt.ylabel("Mobil")
             plt.title("Clustering Kendaraan Jawa Barat")
-            plt.grid(True)
             plt.savefig("static/plot.png")
             plt.close()
 
             data = df.to_dict(orient="records")
 
-            return render_template("hasil.html",
-                                   data=data,
-                                   total_motor=total_motor,
-                                   wilayah_tertinggi=wilayah_tertinggi)
+            return render_template(
+                "hasil.html",
+                data=data,
+                total_motor=total_motor,
+                wilayah_tertinggi=wilayah_tertinggi
+            )
 
         except Exception as e:
             return f"❌ ERROR: {str(e)}"
@@ -76,7 +82,7 @@ def index():
     return render_template("index.html")
 
 
-# WAJIB UNTUK DEPLOY
+# WAJIB UNTUK DEPLOY (Render / Railway)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port)
